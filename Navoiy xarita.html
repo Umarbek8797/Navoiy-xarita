@@ -1,0 +1,109 @@
+<!DOCTYPE html><html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Navoiy Turizm Map (Google'siz, bepul)</title>  <!-- Leaflet CSS -->  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />  <style>
+    body { margin:0; font-family: Arial, sans-serif; background:#f4f6f8; }
+    header { background:#2c3e50; color:white; padding:15px; text-align:center; }
+    .container { max-width:1200px; margin:auto; padding:15px; }
+    #map { height:60vh; border-radius:10px; }
+    .filter { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    button { background:#3498db; color:white; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; }
+    button:hover { background:#2980b9; }
+    #details { background:white; padding:15px; border-radius:10px; margin-top:15px; }
+    .loading { color:#555; font-style:italic; }
+  </style></head>
+<body><header>
+  <h2>Navoiy Turistik Obyektlar (50 km, 100% bepul)</h2>
+</header><div class="container">  <div class="filter">
+    <button onclick="loadOSM('all')">Barchasi</button>
+    <button onclick="loadOSM('museum')">Muzeylar</button>
+    <button onclick="loadOSM('park')">Parklar</button>
+    <button onclick="loadOSM('hotel')">Mehmonxonalar</button>
+  </div>  <div id="map"></div>  <div id="details">
+    <b>Obyekt ma’lumoti</b>
+    <p>Xaritadagi belgini bosing</p>
+  </div></div><!-- Leaflet JS --><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
+  // 1. Xarita (Navoiy markaz)
+  const leafletMap = L.map('map').setView([40.1039, 65.3739], 10);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(leafletMap);
+
+  let markers = [];
+
+  function clearMarkers() {
+    markers.forEach(m => leafletMap.removeLayer(m));
+    markers = [];
+  }
+
+  // 2. Overpass API orqali OSM ma’lumotlarini olish
+  function loadOSM(category) {
+    clearMarkers();
+
+    document.getElementById('details').innerHTML = '<p class="loading">Ma’lumotlar yuklanmoqda...</p>';
+
+    // Navoiy koordinatasi va 50 km radius
+    const lat = 40.1039;
+    const lon = 65.3739;
+    const radius = 50000;
+
+    let filter = '';
+
+    if (category === 'museum') filter = 'node["tourism"="museum"]';
+    else if (category === 'park') filter = 'node["leisure"="park"]';
+    else if (category === 'hotel') filter = 'node["tourism"="hotel"]';
+    else filter = 'node["tourism"]';
+
+    const query = 
+      [out:json][timeout:25];
+      ${filter}(around:${radius},${lat},${lon});
+      out body;
+    ;
+
+    fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.elements || data.elements.length === 0) {
+        document.getElementById('details').innerHTML = '<p>Hech narsa topilmadi</p>';
+        return;
+      }
+
+      data.elements.forEach(el => {
+        if (!el.lat || !el.lon) return;
+
+        const name = el.tags.name || 'Nomsiz obyekt';
+        const type = el.tags.tourism  el.tags.leisure  '—';
+
+        const marker = L.marker([el.lat, el.lon]).addTo(leafletMap);
+        marker.bindPopup(<b>${name}</b><br>${type});
+
+        marker.on('click', () => {
+          document.getElementById('details').innerHTML = 
+            <h3>${name}</h3>
+            <p>Turi: ${type}</p>
+            <p>Koordinata: ${el.lat.toFixed(4)}, ${el.lon.toFixed(4)}</p>
+          ;
+        });
+
+        markers.push(marker);
+      });
+
+      const group = L.featureGroup(markers);
+      leafletMap.fitBounds(group.getBounds());
+
+      document.getElementById('details').innerHTML = <p>${markers.length} ta obyekt topildi</p>;
+    })
+    .catch(() => {
+      document.getElementById('details').innerHTML = '<p>Xatolik yuz berdi</p>';
+    });
+  }
+
+  // 3. Sahifa ochilganda
+  loadOSM('all');
+</script></body>
+</html>
